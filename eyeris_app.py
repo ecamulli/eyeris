@@ -12,6 +12,8 @@ if "agents_data" not in st.session_state:
     st.session_state.agents_data = None
 if "device_list" not in st.session_state:
     st.session_state.device_list = []
+if "company_analysis_results" not in st.session_state:
+    st.session_state.company_analysis_results = None
 
 async def authenticate(client_id, client_secret):
     """Authenticate with the 7SIGNAL API and return token."""
@@ -135,9 +137,45 @@ async def analyze_device(device_id, token):
 
     return analysis_results
 
+async def analyze_all_devices(device_list, token):
+    """Analyze all licensed devices and return results."""
+    company_results = {}
+    for device_name, device_nickname, device_id in device_list:
+        display_name = f"{device_nickname if device_nickname != 'N/A' else device_name}"
+        results = await analyze_device(device_id, token)
+        company_results[display_name] = results
+    return company_results
+
+def summarize_company_performance(company_results):
+    """Generate a company-wide performance overview listing devices with issues."""
+    summary = "**Company Performance Overview**\n\n"
+    summary += "----------------------------------\n\n"
+
+    devices_with_issues = []
+    for device_name, results in company_results.items():
+        device_issues = []
+        for analysis_type, result in results.items():
+            if result.get("error"):
+                device_issues.append(f"{analysis_type}: Failed to retrieve data ({result['error']})")
+                continue
+            response_text = result["data"].get("response", "")
+            num_issues = re.search(r"Number of Issues: (\d+)", response_text)
+            main_issue = re.search(r"Main Issue: (.*?)\n", response_text)
+            if num_issues and int(num_issues.group(1)) > 0 and main_issue:
+                device_issues.append(f"{analysis_type}: {main_issue.group(1)}")
+        if device_issues:
+            devices_with_issues.append(f"**{device_name}**\n" + "\n".join([f"  - {issue}" for issue in device_issues]))
+
+    if devices_with_issues:
+        summary += "\n".join(devices_with_issues) + "\n"
+    else:
+        summary += "No issues found across all licensed devices.\n"
+
+    return summary
+
 def summarize_analysis_results(device_name, device_nickname, analysis_results):
     """
-    Generate a simplified summary from the four analysis responses.
+    Generate a simplified summary for a single device.
     Parses the 'response' field to extract key issues, metrics, and recommendations.
     """
     summary = f"**Summary for Device: {device_name} (Nickname: {device_nickname})**\n\n"
@@ -229,10 +267,10 @@ def summarize_analysis_results(device_name, device_nickname, analysis_results):
     return summary
 
 # Streamlit app
-st.title("7SIGNAL Network Analysis App")
+st.title("7SIGNAL Eyeris AI Analysis")
 
 # Authentication section
-st.header("Authenticate with 7SIGNAL API")
+st.header("Authenticate...")
 col1, col2 = st.columns(2)
 with col1:
     client_id = st.text_input("Client ID", type="password")
@@ -260,12 +298,23 @@ if connect_button and client_id and client_secret:
                 ]
                 if st.session_state.device_list:
                     st.success(f"Connected! Found {len(st.session_state.device_list)} licensed devices.")
+                    # Run analyses for all licensed devices
+                    with st.spinner("Running analyses for all licensed devices..."):
+                        st.session_state.company_analysis_results = asyncio.run(
+                            analyze_all_devices(st.session_state.device_list, st.session_state.token)
+                        )
                 else:
                     st.warning("No licensed devices found. Please check your account or API response.")
 
+# Display Company Performance Overview
+if st.session_state.company_analysis_results:
+    st.header("Company Performance Overview")
+    overview = summarize_company_performance(st.session_state.company_analysis_results)
+    st.markdown(overview)
+
 # Device selection and analysis
 if st.session_state.token and st.session_state.device_list:
-    st.header("Analyze Device")
+    st.header("Analyze Single Device")
     # Create display names for dropdown (show nickname if available, else name)
     display_names = [
         f"{nickname if nickname != 'N/A' else name} (ID: {device_id})"
