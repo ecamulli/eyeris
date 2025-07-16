@@ -229,10 +229,10 @@ def summarize_analysis_results(device_name, device_nickname, analysis_results):
     return summary
 
 # Streamlit app
-st.title("7SIGNAL Eyeris AI Analysis")
+st.title("7SIGNAL Network Analysis App")
 
 # Authentication section
-st.header("Authenticate first...")
+st.header("Authenticate with 7SIGNAL API")
 col1, col2 = st.columns(2)
 with col1:
     client_id = st.text_input("Client ID", type="password")
@@ -252,12 +252,16 @@ if connect_button and client_id and client_secret:
                 st.error(error)
             else:
                 st.session_state.agents_data = agents_data
-                # Build device list for dropdown
+                # Build device list for dropdown, only include licensed devices
                 st.session_state.device_list = [
                     (agent.get("name", "N/A"), agent.get("nickname", "N/A"), agent.get("id"))
                     for agent in agents_data.get("results", [])
+                    if agent.get("isLicensed", False)
                 ]
-                st.success(f"Connected! Found {len(st.session_state.device_list)} devices.")
+                if st.session_state.device_list:
+                    st.success(f"Connected! Found {len(st.session_state.device_list)} licensed devices.")
+                else:
+                    st.warning("No licensed devices found. Please check your account or API response.")
 
 # Device selection and analysis
 if st.session_state.token and st.session_state.device_list:
