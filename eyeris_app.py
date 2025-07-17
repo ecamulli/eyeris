@@ -2,7 +2,7 @@ import streamlit as st
 import aiohttp
 import asyncio
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 import re
 
 # Initialize session state
@@ -137,7 +137,7 @@ async def analyze_device(device_id, token):
 
 def summarize_analysis_results(device_name, device_nickname, analysis_results):
     """
-    Generate a simplified summary from the four analysis responses.
+    Generate a simplified summary for a single device.
     Parses the 'response' field to extract key issues, metrics, and recommendations.
     """
     summary = f"**Summary for Device: {device_name} (Nickname: {device_nickname})**\n\n"
@@ -232,7 +232,7 @@ def summarize_analysis_results(device_name, device_nickname, analysis_results):
 st.title("7SIGNAL Eyeris AI Analysis")
 
 # Authentication section
-st.header("Authenticate...")
+st.header("Authenticate with 7SIGNAL API")
 col1, col2 = st.columns(2)
 with col1:
     client_id = st.text_input("Client ID", type="password")
@@ -252,16 +252,19 @@ if connect_button and client_id and client_secret:
                 st.error(error)
             else:
                 st.session_state.agents_data = agents_data
-                # Build device list for dropdown, only include licensed devices
+                # Get today's date for filtering
+                today = date.today()
+                # Build device list for dropdown, only include licensed devices with lastTestSeen today
                 st.session_state.device_list = [
                     (agent.get("name", "N/A"), agent.get("nickname", "N/A"), agent.get("id"))
                     for agent in agents_data.get("results", [])
-                    if agent.get("isLicensed", False)
+                    if agent.get("isLicensed", False) and agent.get("lastTestSeen") and
+                    datetime.fromtimestamp(agent.get("lastTestSeen") / 1000).date() == today
                 ]
                 if st.session_state.device_list:
-                    st.success(f"Connected! Found {len(st.session_state.device_list)} licensed devices.")
+                    st.success(f"Connected! Found {len(st.session_state.device_list)} licensed devices with tests seen today.")
                 else:
-                    st.warning("No licensed devices found. Please check your account or API response.")
+                    st.warning("No licensed devices with tests seen today found. Please check your account or API response.")
 
 # Device selection and analysis
 if st.session_state.token and st.session_state.device_list:
