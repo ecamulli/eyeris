@@ -179,7 +179,7 @@ def summarize_analysis_results(device_name, device_nickname, analysis_results):
             recommendations["network_side"].extend([f.strip() for f in network_fixes[0][0].split("\n") if f.strip()])
 
     # Build the summary
-    summary += "**Performance Overview**\n"
+    summary += "**Performance Overview (last 2 hours)**\n"
     for issue in issues_found:
         summary += f"- {issue}\n"
 
