@@ -94,7 +94,7 @@ async def analyze_device(device_id, token):
 
     # Calculate timestamps once
     now = int(datetime.now().timestamp() * 1000)
-    two_hours_ago = int((datetime.now() - timedelta(hours=2)).timestamp() * 1000)
+    two_hours_ago = int((datetime.now() - timedelta(hours=3)).timestamp() * 1000)
 
     headers = {
         "Accept": "application/json",
