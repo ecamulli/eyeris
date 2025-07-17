@@ -138,13 +138,12 @@ async def analyze_device(device_id, token):
 def summarize_analysis_results(device_name, device_nickname, analysis_results):
     """
     Generate a simplified summary for a single device.
-    Parses the 'response' field to extract key issues, metrics, and recommendations.
+    Parses the 'response' field to extract key issues and recommendations.
     """
     summary = f"**Summary for Device: {device_name} (Nickname: {device_nickname})**\n\n"
     summary += "----------------------------------\n\n"
 
     issues_found = []
-    metrics_summary = []
     recommendations = {"device_side": [], "network_side": []}
     failed_analyses = []
 
@@ -171,20 +170,6 @@ def summarize_analysis_results(device_name, device_nickname, analysis_results):
         else:
             issues_found.append(f"{analysis_type}: No significant issues (100% SLA compliance)")
 
-        # Extract key metrics
-        if analysis_type == "Roaming":
-            metrics = re.findall(r"Channel utilization.*?\n|Signal strength.*?dBm|Client counts.*?\n", response_text)
-            metrics_summary.append(f"{analysis_type}: {', '.join([m.strip() for m in metrics if m])}")
-        elif analysis_type == "Coverage":
-            metrics = re.findall(r"Signal strength.*?dBm|7MCS values.*?[,\.\n]", response_text)
-            metrics_summary.append(f"{analysis_type}: {', '.join([m.strip() for m in metrics if m])}")
-        elif analysis_type == "Congestion":
-            metrics = re.findall(r"Channel utilization.*?[,\.\n]|Signal strength.*?dBm|Client counts.*?\n", response_text)
-            metrics_summary.append(f"{analysis_type}: {', '.join([m.strip() for m in metrics if m])}")
-        elif analysis_type == "Interference":
-            metrics = re.findall(r"Co-Channel Interference.*?[,\.\n]|Channel utilization.*?[,\.\n]|Signal strength.*?dBm", response_text)
-            metrics_summary.append(f"{analysis_type}: {', '.join([m.strip() for m in metrics if m])}")
-
         # Extract recommendations
         device_fixes = re.findall(r"Device-side fixes.*?:(.*?)(?=(Network-side fixes|Note:|$))", response_text, re.DOTALL)
         network_fixes = re.findall(r"Network-side fixes.*?:(.*?)(?=(Device-side fixes|Note:|$))", response_text, re.DOTALL)
@@ -197,10 +182,6 @@ def summarize_analysis_results(device_name, device_nickname, analysis_results):
     summary += "**Performance Overview**\n"
     for issue in issues_found:
         summary += f"- {issue}\n"
-
-    summary += "\n**Key Metrics**\n"
-    for metric in metrics_summary:
-        summary += f"- {metric}\n"
 
     # Deduplicate and prioritize recommendations
     unique_device_fixes = list(dict.fromkeys([f for f in recommendations["device_side"] if f]))
