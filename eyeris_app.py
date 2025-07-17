@@ -179,7 +179,7 @@ def summarize_analysis_results(device_name, device_nickname, analysis_results):
             recommendations["network_side"].extend([f.strip() for f in network_fixes[0][0].split("\n") if f.strip()])
 
     # Build the summary
-    summary += "**Performance Overview (last 2 hours)**\n"
+    summary += "**Performance Overview**\n"
     for issue in issues_found:
         summary += f"- {issue}\n"
 
@@ -187,11 +187,11 @@ def summarize_analysis_results(device_name, device_nickname, analysis_results):
     unique_device_fixes = list(dict.fromkeys([f for f in recommendations["device_side"] if f]))
     unique_network_fixes = list(dict.fromkeys([f for f in recommendations["network_side"] if f]))
     if unique_device_fixes or unique_network_fixes:
-        summary += "\n**Recommended Actions**\n"
+        summary += "\n**Recommended Actions**\n\n"
         if unique_device_fixes:
-            summary += "**Device-Side**\n" + "\n".join([f"  - {f}" for f in unique_device_fixes[:3]]) + "\n"
+            summary += "**Device-Side**\n\n" + "\n".join([f"- {f}" for f in unique_device_fixes[:3]]) + "\n\n"
         if unique_network_fixes:
-            summary += "**Network-Side**\n" + "\n".join([f"  - {f}" for f in unique_network_fixes[:3]]) + "\n"
+            summary += "**Network-Side**\n\n" + "\n".join([f"- {f}" for f in unique_network_fixes[:3]]) + "\n"
 
     if failed_analyses:
         summary += "\n**Failed Analyses**\n" + "\n".join([f"- {f}" for f in failed_analyses]) + "\n"
