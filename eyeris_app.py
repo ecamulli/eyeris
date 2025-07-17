@@ -229,10 +229,10 @@ def summarize_analysis_results(device_name, device_nickname, analysis_results):
     return summary
 
 # Streamlit app
-st.title("7SIGNAL Network Analysis App")
+st.title("7SIGNAL Eyeris AI Network Analysis")
 
 # Authentication section
-st.header("Authenticate with 7SIGNAL API")
+st.header("Authenticate...")
 col1, col2 = st.columns(2)
 with col1:
     client_id = st.text_input("Client ID", type="password")
