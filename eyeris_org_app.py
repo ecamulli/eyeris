@@ -294,3 +294,11 @@ if st.session_state.token and st.session_state.device_list:
             st.header("Non-Compliant Devices")
             org_summary = summarize_non_compliant_devices(st.session_state.org_analysis_results, st.session_state.device_list)
             st.markdown(org_summary)
+
+            # Download button for the report
+            st.download_button(
+                label="Download Report",
+                data=org_summary,
+                file_name=f"7signal_eyeris_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
+                mime="text/plain"
+            )
