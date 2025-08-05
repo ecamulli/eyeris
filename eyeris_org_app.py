@@ -54,15 +54,15 @@ async def authenticate(client_id, client_secret, rate_limiter):
         "Content-Type": "application/x-www-form-urlencoded"
     }
     async with aiohttp.ClientSession() as session:
-        async with rate_limiter.acquire():
-            async with session.post(auth_url, data=auth_data, headers=auth_headers) as response:
-                if response.status != 200:
-                    return None, f"Authentication failed: HTTP {response.status}: {await response.text()}"
-                result = await response.json()
-                token = result.get("access_token")
-                if not token:
-                    return None, "No token received"
-                return token, None
+        await rate_limiter.acquire()  # Wait for a token
+        async with session.post(auth_url, data=auth_data, headers=auth_headers) as response:
+            if response.status != 200:
+                return None, f"Authentication failed: HTTP {response.status}: {await response.text()}"
+            result = await response.json()
+            token = result.get("access_token")
+            if not token:
+                return None, "No token received"
+            return token, None
 
 async def fetch_agents(token, rate_limiter, session):
     """Fetch the list of devices from the agents endpoint."""
@@ -71,26 +71,26 @@ async def fetch_agents(token, rate_limiter, session):
         "Accept": "application/json",
         "Authorization": f"Bearer {token}"
     }
-    async with rate_limiter.acquire():
-        async with session.get(agents_url, headers=headers) as response:
-            if response.status != 200:
-                return None, f"Failed to fetch agents: HTTP {response.status}: {await response.text()}"
-            return await response.json(), None
+    await rate_limiter.acquire()  # Wait for a token
+    async with session.get(agents_url, headers=headers) as response:
+        if response.status != 200:
+            return None, f"Failed to fetch agents: HTTP {response.status}: {await response.text()}"
+        return await response.json(), None
 
 async def post_analysis(session, url, headers, data, analysis_type, rate_limiter, retries=3, backoff_factor=0.75):
     """Helper function to make an async POST request with retry logic."""
     for attempt in range(retries):
         try:
-            async with rate_limiter.acquire():
-                async with session.post(url, json=data, headers=headers) as response:
-                    if response.status == 200:
-                        return analysis_type, await response.json()
-                    elif response.status == 429:  # Rate limit
-                        wait_time = backoff_factor * (2 ** attempt)
-                        st.warning(f"Rate limit hit for {analysis_type}, retrying after {wait_time}s...")
-                        await asyncio.sleep(wait_time)
-                    else:
-                        return analysis_type, {"error": f"HTTP {response.status}: {await response.text()}"}
+            await rate_limiter.acquire()  # Wait for a token
+            async with session.post(url, json=data, headers=headers) as response:
+                if response.status == 200:
+                    return analysis_type, await response.json()
+                elif response.status == 429:  # Rate limit
+                    wait_time = backoff_factor * (2 ** attempt)
+                    st.warning(f"Rate limit hit for {analysis_type}, retrying after {wait_time}s...")
+                    await asyncio.sleep(wait_time)
+                else:
+                    return analysis_type, {"error": f"HTTP {response.status}: {await response.text()}"}
         except aiohttp.ClientError as e:
             if attempt == retries - 1:
                 return analysis_type, {"error": str(e)}
@@ -101,16 +101,16 @@ async def get_analysis_result(session, url, headers, analysis_type, rate_limiter
     """Helper function to make an async GET request with retry logic."""
     for attempt in range(retries):
         try:
-            async with rate_limiter.acquire():
-                async with session.get(url, headers=headers) as response:
-                    if response.status == 200:
-                        return analysis_type, {"data": await response.json()}
-                    elif response.status == 429:  # Rate limit
-                        wait_time = backoff_factor * (2 ** attempt)
-                        st.warning(f"Rate limit hit for {analysis_type} result, retrying after {wait_time}s...")
-                        await asyncio.sleep(wait_time)
-                    else:
-                        return analysis_type, {"error": f"HTTP {response.status}: {await response.text()}"}
+            await rate_limiter.acquire()  # Wait for a token
+            async with session.get(url, headers=headers) as response:
+                if response.status == 200:
+                    return analysis_type, {"data": await response.json()}
+                elif response.status == 429:  # Rate limit
+                    wait_time = backoff_factor * (2 ** attempt)
+                    st.warning(f"Rate limit hit for {analysis_type} result, retrying after {wait_time}s...")
+                    await asyncio.sleep(wait_time)
+                else:
+                    return analysis_type, {"error": f"HTTP {response.status}: {await response.text()}"}
         except aiohttp.ClientError as e:
             if attempt == retries - 1:
                 return analysis_type, {"error": str(e)}
