@@ -138,7 +138,7 @@ async def analyze_device(device_id, token):
 
     return analysis_results
 
-def summarize_non_compliant_devices(org_analysis_results, device_list):
+ fodef summarize_non_compliant_devices(org_analysis_results, device_list):
     """
     Generate a list of devices with less than 100% SLA compliance, showing their issues.
     """
@@ -146,8 +146,10 @@ def summarize_non_compliant_devices(org_analysis_results, device_list):
     summary += "----------------------------------\n\n"
 
     # Map device IDs to display names for readable output
-    device_display_names = {device_id: f"{nickname if nickname != 'N/A' else name} (ID: {device_id})"
-                           for _, nickname, device_id in device_list}
+    device_display_names = {
+        device_id: f"{nickname if nickname != 'N/A' else name} (ID: {device_id})"
+        for name, nickname, device_id in device_list  # Unpack the tuple correctly
+    }
 
     # Track devices with issues
     non_compliant_devices = []
@@ -186,7 +188,6 @@ def summarize_non_compliant_devices(org_analysis_results, device_list):
         summary += "All devices are performing well with 100% SLA compliance across all analyses.\n"
 
     return summary
-
 # Streamlit app
 st.title("7SIGNAL Eyeris AI Organization Analysis")
 
