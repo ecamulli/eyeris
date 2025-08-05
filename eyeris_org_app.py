@@ -1,10 +1,10 @@
+```python
 import streamlit as st
 import aiohttp
 import asyncio
 import json
 from datetime import datetime, timedelta, date
 import re
-import time
 
 # Initialize session state
 if "token" not in st.session_state:
@@ -51,7 +51,7 @@ async def fetch_agents(token):
                 return None, f"Failed to fetch agents: HTTP {response.status}: {await response.text()}"
             return await response.json(), None
 
-async def post_analysis(session, url, headers, data, analysis_type, retries=3, backoff_factor=1):
+async def post_analysis(session, url, headers, data, analysis_type, retries=3, backoff_factor=0.5):
     """Helper function to make an async POST request with retry logic."""
     for attempt in range(retries):
         try:
@@ -70,7 +70,7 @@ async def post_analysis(session, url, headers, data, analysis_type, retries=3, b
             await asyncio.sleep(backoff_factor * (2 ** attempt))
     return analysis_type, {"error": "Max retries reached"}
 
-async def get_analysis_result(session, url, headers, analysis_type, retries=3, backoff_factor=1):
+async def get_analysis_result(session, url, headers, analysis_type, retries=3, backoff_factor=0.5):
     """Helper function to make an async GET request with retry logic."""
     for attempt in range(retries):
         try:
@@ -89,54 +89,55 @@ async def get_analysis_result(session, url, headers, analysis_type, retries=3, b
             await asyncio.sleep(backoff_factor * (2 ** attempt))
     return analysis_type, {"error": "Max retries reached"}
 
-async def analyze_device(device_id, token):
-    """Perform all four analyses concurrently for a device."""
-    analysis_types = ["Roaming", "Coverage", "Congestion", "Interference"]
-    analysis_results = {}
-    analysis_url = 'https://api-v2.7signal.com/eyeris/agents/client-analysis'
+async def analyze_device(device_id, token, semaphore):
+    """Perform all four analyses concurrently for a device with semaphore control."""
+    async with semaphore:  # Limit concurrent requests
+        analysis_types = ["Roaming", "Coverage", "Congestion", "Interference"]
+        analysis_results = {}
+        analysis_url = 'https://api-v2.7signal.com/eyeris/agents/client-analysis'
 
-    # Calculate timestamps once
-    now = int(datetime.now().timestamp() * 1000)
-    two_hours_ago = int((datetime.now() - timedelta(hours=2)).timestamp() * 1000)
+        # Calculate timestamps once
+        now = int(datetime.now().timestamp() * 1000)
+        two_hours_ago = int((datetime.now() - timedelta(hours=2)).timestamp() * 1000)
 
-    headers = {
-        "Accept": "application/json",
-        "Authorization": f"Bearer {token}"
-    }
+        headers = {
+            "Accept": "application/json",
+            "Authorization": f"Bearer {token}"
+        }
 
-    async with aiohttp.ClientSession() as session:
-        # Concurrent POST requests
-        post_tasks = []
-        for analysis_type in analysis_types:
-            analysis_data = {
-                "agentId": device_id,
-                "type": analysis_type.upper(),
-                "from": str(two_hours_ago),
-                "to": str(now)
-            }
-            post_tasks.append(post_analysis(session, analysis_url, headers, analysis_data, analysis_type))
-        post_results = await asyncio.gather(*post_tasks, return_exceptions=True)
+        async with aiohttp.ClientSession() as session:
+            # Concurrent POST requests
+            post_tasks = []
+            for analysis_type in analysis_types:
+                analysis_data = {
+                    "agentId": device_id,
+                    "type": analysis_type.upper(),
+                    "from": str(two_hours_ago),
+                    "to": str(now)
+                }
+                post_tasks.append(post_analysis(session, analysis_url, headers, analysis_data, analysis_type))
+            post_results = await asyncio.gather(*post_tasks, return_exceptions=True)
 
-        # Process POST results
-        get_tasks = []
-        for analysis_type, result in post_results:
-            if result.get("error"):
+            # Process POST results
+            get_tasks = []
+            for analysis_type, result in post_results:
+                if result.get("error"):
+                    analysis_results[analysis_type] = result
+                    continue
+                request_id = result.get("requestId")
+                request_queue_id = result.get("requestQueueId")
+                if not request_id or not request_queue_id:
+                    analysis_results[analysis_type] = {"error": "Invalid analysis response"}
+                    continue
+                result_url = f"https://api-v2.7signal.com/eyeris/agents/client-analysis/{request_id}?requestQueueId={request_queue_id}"
+                get_tasks.append(get_analysis_result(session, result_url, headers, analysis_type))
+
+            # Concurrent GET requests
+            get_results = await asyncio.gather(*get_tasks, return_exceptions=True)
+            for analysis_type, result in get_results:
                 analysis_results[analysis_type] = result
-                continue
-            request_id = result.get("requestId")
-            request_queue_id = result.get("requestQueueId")
-            if not request_id or not request_queue_id:
-                analysis_results[analysis_type] = {"error": "Invalid analysis response"}
-                continue
-            result_url = f"https://api-v2.7signal.com/eyeris/agents/client-analysis/{request_id}?requestQueueId={request_queue_id}"
-            get_tasks.append(get_analysis_result(session, result_url, headers, analysis_type))
 
-        # Concurrent GET requests
-        get_results = await asyncio.gather(*get_tasks, return_exceptions=True)
-        for analysis_type, result in get_results:
-            analysis_results[analysis_type] = result
-
-    return analysis_results
+        return device_id, analysis_results
 
 def summarize_non_compliant_devices(org_analysis_results, device_list):
     """
@@ -237,14 +238,23 @@ if st.session_state.token and st.session_state.device_list:
             st.session_state.org_analysis_results = {}
             progress_bar = st.progress(0)
             total_devices = len(st.session_state.device_list)
-            for i, (device_name, device_nickname, device_id) in enumerate(st.session_state.device_list):
-                analysis_results = asyncio.run(analyze_device(device_id, st.session_state.token))
-                st.session_state.org_analysis_results[device_id] = (device_name, device_nickname, analysis_results)
-                # Update progress
-                progress_bar.progress((i + 1) / total_devices)
-                # Delay to avoid API throttling
-                time.sleep(1)
+            semaphore = asyncio.Semaphore(5)  # Limit to 5 concurrent device analyses
+
+            async def run_all_analyses():
+                tasks = [
+                    analyze_device(device_id, st.session_state.token, semaphore)
+                    for _, _, device_id in st.session_state.device_list
+                ]
+                results = await asyncio.gather(*tasks, return_exceptions=True)
+                for i, (device_id, analysis_results) in enumerate(results):
+                    if not isinstance(analysis_results, Exception):
+                        device_name, device_nickname, _ = st.session_state.device_list[i]
+                        st.session_state.org_analysis_results[device_id] = (device_name, device_nickname, analysis_results)
+                    progress_bar.progress((i + 1) / total_devices)
+
+            asyncio.run(run_all_analyses())
 
             st.header("Non-Compliant Devices")
             org_summary = summarize_non_compliant_devices(st.session_state.org_analysis_results, st.session_state.device_list)
             st.markdown(org_summary)
+```
