@@ -138,169 +138,52 @@ async def analyze_device(device_id, token):
 
     return analysis_results
 
-def summarize_analysis_results(device_name, device_nickname, analysis_results):
+def summarize_non_compliant_devices(org_analysis_results, device_list):
     """
-    Generate a simplified summary for a single device.
-    Parses the 'response' field to extract key issues and recommendations.
+    Generate a list of devices with less than 100% SLA compliance, showing their issues.
     """
-    summary = f"**Summary for Device: {device_name} (Nickname: {device_nickname})**\n\n"
+    summary = "**Devices with Less than 100% SLA Compliance**\n\n"
     summary += "----------------------------------\n\n"
-
-    issues_found = []
-    recommendations = {"device_side": [], "network_side": []}
-    failed_analyses = []
-
-    for analysis_type, result in analysis_results.items():
-        if result.get("error"):
-            failed_analyses.append(f"{analysis_type}: Failed to retrieve data ({result['error']})")
-            continue
-
-        response_text = result["data"].get("response", "")
-        # Parse key information from response text
-        num_issues = re.search(r"Number of Issues: (\d+)", response_text)
-        major_issues = re.search(r"Major Issues: (.*?)\n", response_text)
-        total_impact = re.search(r"Total Impact: (.*?)\n", response_text)
-        main_issue = re.search(r"Main Issue: (.*?)\n", response_text)
-
-        num_issues = int(num_issues.group(1)) if num_issues else 0
-        major_issues = major_issues.group(1) if major_issues else "None"
-        total_impact = total_impact.group(1) if total_impact else "N/A"
-        main_issue = main_issue.group(1) if main_issue else "N/A"
-
-        # Summarize issues
-        if num_issues > 0:
-            issues_found.append(f"{analysis_type}: {main_issue} (Impact: {total_impact})")
-        else:
-            issues_found.append(f"{analysis_type}: No significant issues (100% SLA compliance)")
-
-        # Extract recommendations
-        device_fixes = re.findall(r"Device-side fixes.*?:(.*?)(?=(Network-side fixes|Note:|$))", response_text, re.DOTALL)
-        network_fixes = re.findall(r"Network-side fixes.*?:(.*?)(?=(Device-side fixes|Note:|$))", response_text, re.DOTALL)
-        if device_fixes:
-            recommendations["device_side"].extend([f.strip() for f in device_fixes[0][0].split("\n") if f.strip()])
-        if network_fixes:
-            recommendations["network_side"].extend([f.strip() for f in network_fixes[0][0].split("\n") if f.strip()])
-
-    # Build the summary
-    summary += "**Performance Overview**\n"
-    for issue in issues_found:
-        summary += f"- {issue}\n"
-
-    # Deduplicate and prioritize recommendations
-    unique_device_fixes = list(dict.fromkeys([f for f in recommendations["device_side"] if f]))
-    unique_network_fixes = list(dict.fromkeys([f for f in recommendations["network_side"] if f]))
-    if unique_device_fixes or unique_network_fixes:
-        summary += "\n**Recommended Actions**\n\n"
-        if unique_device_fixes:
-            summary += "**Device-Side**\n\n" + "\n".join([f"- {f}" for f in unique_device_fixes[:3]]) + "\n\n"
-        if unique_network_fixes:
-            summary += "**Network-Side**\n\n" + "\n".join([f"- {f}" for f in unique_network_fixes[:3]]) + "\n"
-
-    if failed_analyses:
-        summary += "\n**Failed Analyses**\n" + "\n".join([f"- {f}" for f in failed_analyses]) + "\n"
-
-    # Overall assessment
-    successful_analyses = len([k for k, v in analysis_results.items() if not v.get("error")])
-    total_issues = sum([int(re.search(r"Number of Issues: (\d+)", analysis_results[k]["data"].get("response", "")).group(1)) 
-                        for k in analysis_results if not analysis_results[k].get("error") and re.search(r"Number of Issues: (\d+)", analysis_results[k]["data"].get("response", ""))])
-    if successful_analyses == 4 and total_issues == 0:
-        summary += "\n**Overall**: The device is performing well with no issues across all analyses.\n"
-    elif successful_analyses > 0:
-        summary += f"\n**Overall**: {successful_analyses} of 4 analyses completed successfully. {total_issues} issue(s) found, check recommendations for fixes.\n"
-    else:
-        summary += "\n**Overall**: No analyses completed successfully. Please check API connectivity or device status.\n"
-
-    return summary, recommendations, failed_analyses
-
-def summarize_organization_results(org_analysis_results, device_list):
-    """
-    Generate an organization-wide summary by grouping devices by issue types with severity and recommendations.
-    """
-    summary = "**Overall Organization Device Summary**\n\n"
-    summary += "----------------------------------\n\n"
-
-    # Initialize dictionaries to group issues and recommendations
-    issue_groups = {
-        "Roaming": [],
-        "Coverage": [],
-        "Congestion": [],
-        "Interference": [],
-        "Failed Analyses": []
-    }
-    org_recommendations = {
-        "Roaming": {"device_side": [], "network_side": []},
-        "Coverage": {"device_side": [], "network_side": []},
-        "Congestion": {"device_side": [], "network_side": []},
-        "Interference": {"device_side": [], "network_side": []}
-    }
-    all_successful = True
-    total_devices = len(device_list)
-    total_issues = 0
 
     # Map device IDs to display names for readable output
     device_display_names = {device_id: f"{nickname if nickname != 'N/A' else name} (ID: {device_id})"
                            for _, nickname, device_id in device_list}
 
+    # Track devices with issues
+    non_compliant_devices = []
+
     # Process each device's analysis results
     for device_id, (device_name, device_nickname, analysis_results) in org_analysis_results.items():
         display_name = device_display_names.get(device_id, f"{device_name} (ID: {device_id})")
+        device_issues = []
+
         for analysis_type, result in analysis_results.items():
             if result.get("error"):
-                issue_groups["Failed Analyses"].append(f"{display_name}: {analysis_type} failed ({result['error']})")
-                all_successful = False
+                device_issues.append(f"{analysis_type}: Failed to retrieve data ({result['error']})")
                 continue
 
             response_text = result["data"].get("response", "")
             num_issues = re.search(r"Number of Issues: (\d+)", response_text)
-            total_impact = re.search(r"Total Impact: (.*?)\n", response_text)
             main_issue = re.search(r"Main Issue: (.*?)\n", response_text)
 
             num_issues = int(num_issues.group(1)) if num_issues else 0
-            total_impact = total_impact.group(1) if total_impact else "N/A"
             main_issue = main_issue.group(1) if main_issue else "N/A"
 
             if num_issues > 0:
-                issue_groups[analysis_type].append(f"{display_name}: {main_issue} (Impact: {total_impact})")
-                total_issues += num_issues
+                device_issues.append(f"{analysis_type}: {main_issue}")
 
-            # Collect recommendations
-            device_fixes = re.findall(r"Device-side fixes.*?:(.*?)(?=(Network-side fixes|Note:|$))", response_text, re.DOTALL)
-            network_fixes = re.findall(r"Network-side fixes.*?:(.*?)(?=(Device-side fixes|Note:|$))", response_text, re.DOTALL)
-            if device_fixes:
-                org_recommendations[analysis_type]["device_side"].extend([f.strip() for f in device_fixes[0][0].split("\n") if f.strip()])
-            if network_fixes:
-                org_recommendations[analysis_type]["network_side"].extend([f.strip() for f in network_fixes[0][0].split("\n") if f.strip()])
+        if device_issues:
+            non_compliant_devices.append((display_name, device_issues))
 
     # Build the summary
-    for issue_type in ["Roaming", "Coverage", "Congestion", "Interference"]:
-        if issue_groups[issue_type]:
-            summary += f"**{issue_type} Issues**\n\n"
-            for issue in issue_groups[issue_type]:
+    if non_compliant_devices:
+        for display_name, issues in non_compliant_devices:
+            summary += f"**{display_name}**\n"
+            for issue in issues:
                 summary += f"- {issue}\n"
-            # Deduplicate recommendations
-            unique_device_fixes = list(dict.fromkeys(org_recommendations[issue_type]["device_side"]))
-            unique_network_fixes = list(dict.fromkeys(org_recommendations[issue_type]["network_side"]))
-            if unique_device_fixes or unique_network_fixes:
-                summary += "\n**Recommended Actions**\n\n"
-                if unique_device_fixes:
-                    summary += "**Device-Side**\n\n" + "\n".join([f"- {f}" for f in unique_device_fixes[:3]]) + "\n\n"
-                if unique_network_fixes:
-                    summary += "**Network-Side**\n\n" + "\n".join([f"- {f}" for f in unique_network_fixes[:3]]) + "\n"
             summary += "\n"
-
-    if issue_groups["Failed Analyses"]:
-        summary += "**Failed Analyses**\n\n"
-        for issue in issue_groups["Failed Analyses"]:
-            summary += f"- {issue}\n"
-        summary += "\n"
-
-    # Overall organization assessment
-    if all_successful and total_issues == 0:
-        summary += f"**Overall**: All {total_devices} devices are performing well with no issues across all analyses.\n"
-    elif total_issues > 0 or issue_groups["Failed Analyses"]:
-        summary += f"**Overall**: Analyzed {total_devices} devices. {total_issues} issue(s) found across devices. Check recommendations for fixes.\n"
     else:
-        summary += f"**Overall**: Analyzed {total_devices} devices. No issues found, but some analyses may have failed. Check failed analyses for details.\n"
+        summary += "All devices are performing well with 100% SLA compliance across all analyses.\n"
 
     return summary
 
@@ -342,29 +225,8 @@ if connect_button and client_id and client_secret:
                 else:
                     st.warning("No licensed devices with tests seen today found. Please check your account or API response.")
 
-# Device selection and analysis
+# Organization-wide analysis
 if st.session_state.token and st.session_state.device_list:
-    st.header("Analyze Device")
-    # Create display names for dropdown (show nickname if available, else name)
-    display_names = [
-        f"{nickname if nickname != 'N/A' else name} (ID: {device_id})"
-        for name, nickname, device_id in st.session_state.device_list
-    ]
-    selected_device = st.selectbox("Select Device", display_names)
-    analyze_button = st.button("Run Analysis")
-
-    if analyze_button:
-        # Find selected device ID
-        selected_index = display_names.index(selected_device)
-        device_name, device_nickname, device_id = st.session_state.device_list[selected_index]
-
-        with st.spinner("Running analyses..."):
-            analysis_results = asyncio.run(analyze_device(device_id, st.session_state.token))
-            st.header("Analysis Results")
-            summary, _, _ = summarize_analysis_results(device_name, device_nickname, analysis_results)
-            st.markdown(summary)
-
-    # Organization-wide analysis
     st.header("Analyze All Devices")
     org_analyze_button = st.button("Run Organization Analysis")
 
@@ -381,14 +243,6 @@ if st.session_state.token and st.session_state.device_list:
                 # Delay to avoid API throttling
                 time.sleep(1)
 
-            st.header("Organization Analysis Results")
-            # Display individual device summaries
-            for device_id, (device_name, device_nickname, analysis_results) in st.session_state.org_analysis_results.items():
-                summary, _, _ = summarize_analysis_results(device_name, device_nickname, analysis_results)
-                st.markdown(summary)
-
-            # Display organization-wide summary
-            org_summary = summarize_organization_results(st.session_state.org_analysis_results, st.session_state.device_list)
-            st.markdown("---")
-            st.header("Overall Organization Device Summary")
+            st.header("Non-Compliant Devices")
+            org_summary = summarize_non_compliant_devices(st.session_state.org_analysis_results, st.session_state.device_list)
             st.markdown(org_summary)
