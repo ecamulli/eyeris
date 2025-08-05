@@ -217,6 +217,18 @@ def summarize_non_compliant_devices(org_analysis_results, device_list):
 
     return summary
 
+async def connect_to_api(client_id, client_secret):
+    """Helper function to handle authentication and fetching agents."""
+    rate_limiter = TokenBucket(rate=5, capacity=15)  # 5 requests/sec, 15 burst
+    token, error = await authenticate(client_id, client_secret, rate_limiter)
+    if error:
+        return None, None, error
+    async with aiohttp.ClientSession() as session:
+        agents_data, error = await fetch_agents(token, rate_limiter, session)
+        if error:
+            return None, None, error
+        return token, agents_data, None
+
 # Streamlit app
 st.title("7SIGNAL Eyeris AI Organization Analysis")
 
@@ -231,31 +243,25 @@ connect_button = st.button("Connect")
 
 if connect_button and client_id and client_secret:
     with st.spinner("Authenticating..."):
-        rate_limiter = TokenBucket(rate=5, capacity=15)  # 5 requests/sec, 15 burst
-        token, error = asyncio.run(authenticate(client_id, client_secret, rate_limiter))
+        token, agents_data, error = asyncio.run(connect_to_api(client_id, client_secret))
         if error:
             st.error(error)
         else:
             st.session_state.token = token
-            async with aiohttp.ClientSession() as session:
-                agents_data, error = asyncio.run(fetch_agents(token, rate_limiter, session))
-                if error:
-                    st.error(error)
-                else:
-                    st.session_state.agents_data = agents_data
-                    # Get today's date for filtering
-                    today = date.today()
-                    # Build device list, only include licensed devices with lastTestSeen today
-                    st.session_state.device_list = [
-                        (agent.get("name", "N/A"), agent.get("nickname", "N/A"), agent.get("id"))
-                        for agent in agents_data.get("results", [])
-                        if agent.get("isLicensed", False) and agent.get("lastTestSeen") and
-                        datetime.fromtimestamp(agent.get("lastTestSeen") / 1000).date() == today
-                    ]
-                    if st.session_state.device_list:
-                        st.success(f"Connected! Found {len(st.session_state.device_list)} licensed devices with tests seen today.")
-                    else:
-                        st.warning("No licensed devices with tests seen today found. Please check your account or API response.")
+            st.session_state.agents_data = agents_data
+            # Get today's date for filtering
+            today = date.today()
+            # Build device list, only include licensed devices with lastTestSeen today
+            st.session_state.device_list = [
+                (agent.get("name", "N/A"), agent.get("nickname", "N/A"), agent.get("id"))
+                for agent in agents_data.get("results", [])
+                if agent.get("isLicensed", False) and agent.get("lastTestSeen") and
+                datetime.fromtimestamp(agent.get("lastTestSeen") / 1000).date() == today
+            ]
+            if st.session_state.device_list:
+                st.success(f"Connected! Found {len(st.session_state.device_list)} licensed devices with tests seen today.")
+            else:
+                st.warning("No licensed devices with tests seen today found. Please check your account or API response.")
 
 # Organization-wide analysis
 if st.session_state.token and st.session_state.device_list:
