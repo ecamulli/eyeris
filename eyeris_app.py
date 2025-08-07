@@ -264,10 +264,10 @@ if st.session_state.token and st.session_state.device_list:
         for name, nickname, device_id in st.session_state.device_list
     ]
     selected_devices = st.multiselect(
-        "Select up to 5 Devices",
+        "Select up to 3 Devices",
         display_names,
-        max_selections=5,
-        help="Select up to 5 devices for concurrent analysis."
+        max_selections=3,
+        help="Select up to 3 devices for concurrent analysis."
     )
     analyze_button = st.button("Run Analysis")
 
@@ -292,3 +292,4 @@ if st.session_state.token and st.session_state.device_list:
                 summary = summarize_analysis_results(device_name, device_nickname, results)
                 st.markdown(summary)
                 st.markdown("---")
+
