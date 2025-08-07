@@ -248,6 +248,14 @@ if connect_button and client_id and client_secret:
                     st.warning("No licensed devices with tests seen today found. Please check your account or API response.")
 
 # Device selection and analysis
+async def run_analyses(selected_device_details, token):
+    """Run analyses for multiple devices concurrently."""
+    analysis_tasks = [
+        analyze_device(device_id, token)
+        for _, _, device_id in selected_device_details
+    ]
+    return await asyncio.gather(*analysis_tasks, return_exceptions=True)
+
 if st.session_state.token and st.session_state.device_list:
     st.header("Analyze Devices")
     # Create display names for dropdown (show nickname if available, else name)
@@ -272,11 +280,7 @@ if st.session_state.token and st.session_state.device_list:
             ]
 
             # Run analyses concurrently for all selected devices
-            analysis_tasks = [
-                analyze_device(device_id, st.session_state.token)
-                for _, _, device_id in selected_device_details
-            ]
-            all_analysis_results = asyncio.run(asyncio.gather(*analysis_tasks, return_exceptions=True))
+            all_analysis_results = asyncio.run(run_analyses(selected_device_details, st.session_state.token))
 
             # Display results for each device
             st.header("Analysis Results")
