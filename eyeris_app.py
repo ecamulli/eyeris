@@ -213,7 +213,7 @@ def summarize_analysis_results(device_name, device_nickname, analysis_results):
 st.title("7SIGNAL Eyeris AI Analysis")
 
 # Authentication section
-st.header("Authenticate with 7SIGNAL API")
+st.subheader("Authenticate with 7SIGNAL API")
 col1, col2 = st.columns(2)
 with col1:
     client_id = st.text_input("Client ID", type="password")
@@ -292,4 +292,5 @@ if st.session_state.token and st.session_state.device_list:
                 summary = summarize_analysis_results(device_name, device_nickname, results)
                 st.markdown(summary)
                 st.markdown("---")
+
 
