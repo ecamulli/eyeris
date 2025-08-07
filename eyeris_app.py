@@ -249,22 +249,42 @@ if connect_button and client_id and client_secret:
 
 # Device selection and analysis
 if st.session_state.token and st.session_state.device_list:
-    st.header("Analyze Device")
+    st.header("Analyze Devices")
     # Create display names for dropdown (show nickname if available, else name)
     display_names = [
         f"{nickname if nickname != 'N/A' else name} (ID: {device_id})"
         for name, nickname, device_id in st.session_state.device_list
     ]
-    selected_device = st.selectbox("Select Device", display_names)
+    selected_devices = st.multiselect(
+        "Select up to 5 Devices",
+        display_names,
+        max_selections=5,
+        help="Select up to 5 devices for concurrent analysis."
+    )
     analyze_button = st.button("Run Analysis")
 
-    if analyze_button:
-        # Find selected device ID
-        selected_index = display_names.index(selected_device)
-        device_name, device_nickname, device_id = st.session_state.device_list[selected_index]
+    if analyze_button and selected_devices:
+        with st.spinner("Running analyses for selected devices..."):
+            # Find selected device IDs and details
+            selected_indices = [display_names.index(device) for device in selected_devices]
+            selected_device_details = [
+                st.session_state.device_list[i] for i in selected_indices
+            ]
 
-        with st.spinner("Running analyses..."):
-            analysis_results = asyncio.run(analyze_device(device_id, st.session_state.token))
+            # Run analyses concurrently for all selected devices
+            analysis_tasks = [
+                analyze_device(device_id, st.session_state.token)
+                for _, _, device_id in selected_device_details
+            ]
+            all_analysis_results = asyncio.run(asyncio.gather(*analysis_tasks, return_exceptions=True))
+
+            # Display results for each device
             st.header("Analysis Results")
-            summary = summarize_analysis_results(device_name, device_nickname, analysis_results)
-            st.markdown(summary)
+            for (device_name, device_nickname, device_id), results in zip(selected_device_details, all_analysis_results):
+                if isinstance(results, Exception):
+                    st.error(f"Error analyzing device {device_name} (ID: {device_id}): {str(results)}")
+                    continue
+                st.subheader(f"Results for {device_name} (Nickname: {device_nickname})")
+                summary = summarize_analysis_results(device_name, device_nickname, results)
+                st.markdown(summary)
+                st.markdown("---")
