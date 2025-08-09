@@ -311,7 +311,7 @@ if st.session_state.token and st.session_state.device_list:
                     <div class="container mx-auto p-4">
                         <h1 class="text-3xl font-bold text-center text-gray-800 mb-6">7SIGNAL Eyeris Non-Compliant Devices</h1>
                         <div class="bg-white shadow-md rounded-lg p-6">
-                            <h2 class="text-xl font-semibold text-gray-700 mb-4">Devices with Issues</h2>
+                            <h2 class="text-xl font-semibold text-gray-700 mb-4">Devices with Issues in the Last 2 Hours</h2>
                             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 """
 
