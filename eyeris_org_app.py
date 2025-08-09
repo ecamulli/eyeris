@@ -274,7 +274,7 @@ if st.session_state.token and st.session_state.device_list:
             st.session_state.org_analysis_results = {}
             progress_bar = st.progress(0)
             total_devices = len(st.session_state.device_list)
-            semaphore = asyncio.Semaphore(1)  # Limit to 1 concurrent device (up to 8 requests)
+            semaphore = asyncio.Semaphore(2)  # Limit to 2 concurrent device
             rate_limiter = TokenBucket(rate=5, capacity=15)  # 5 requests/sec, 15 burst
 
             async def run_all_analyses():
